@@ -1,0 +1,33 @@
+# Ignore build and distribution folders
+build/
+dist/
+
+# Ignore compiled Python files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Ignore PyInstaller files
+*.spec
+
+# Ignore environment files
+.env
+*.env
+
+# Ignore IDE and editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore log and data files
+rfid_data.csv
+*.log
+
+# Ignore backup or old files
+*.old.py
+
+# Ignore OS-generated files
+.DS_Store
+Thumbs.db
