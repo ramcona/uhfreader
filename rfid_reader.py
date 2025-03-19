@@ -27,20 +27,54 @@ class RFIDReader:
 
     def list_serial_ports(self):
         """List all available serial ports and their connection status."""
+        import serial.tools.list_ports
+        
         ports = []
         for port in serial.tools.list_ports.comports():
             try:
-                # Try to open the port to check if it's connected
-                ser = serial.Serial(port.device)
+                # Try to open the port briefly to check if it's available
+                ser = serial.Serial(port.device, timeout=0.1)
                 ser.close()
                 status = "Connected"
             except (OSError, serial.SerialException):
                 status = "Disconnected"
+                
+            # Add port info regardless of connection status
             ports.append({
                 'device': port.device,
                 'description': port.description,
+                'hwid': port.hwid,  # Adding hardware ID for better identification
                 'status': status
             })
+        
+        # If no ports found, check if on Windows and try an alternative approach
+        if len(ports) == 0 and os.name == 'nt':  # 'nt' is Windows
+            try:
+                # Direct Windows-specific approach
+                import winreg
+                # Iterate through registry to find COM ports
+                for i in range(256):
+                    try:
+                        port_name = f'COM{i}'
+                        key_path = f'HARDWARE\\DEVICEMAP\\SERIALCOMM'
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path)
+                        
+                        # Try to get value or continue if fails
+                        try:
+                            val = winreg.QueryValueEx(key, port_name)
+                            ports.append({
+                                'device': port_name,
+                                'description': f'Registry found port',
+                                'hwid': 'Unknown',
+                                'status': 'Unknown'  # Can't easily check without opening
+                            })
+                        except:
+                            pass
+                    except:
+                        pass
+            except:
+                pass
+                
         return ports
 
     def setup_connection(self, port, baud_rate=57600):
