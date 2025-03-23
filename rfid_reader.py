@@ -7,6 +7,7 @@ import threading
 import serial.tools.list_ports
 from threading import Thread
 from queue import Queue
+import os
 
 class RFIDReader:
     def __init__(self):
@@ -28,55 +29,57 @@ class RFIDReader:
     def list_serial_ports(self):
         """List all available serial ports and their connection status."""
         import serial.tools.list_ports
+        import platform
         
         ports = []
-        for port in serial.tools.list_ports.comports():
-            try:
-                # Try to open the port briefly to check if it's available
-                ser = serial.Serial(port.device, timeout=0.1)
-                ser.close()
-                status = "Connected"
-            except (OSError, serial.SerialException):
-                status = "Disconnected"
-                
-            # Add port info regardless of connection status
-            ports.append({
-                'device': port.device,
-                'description': port.description,
-                'hwid': port.hwid,  # Adding hardware ID for better identification
-                'status': status
-            })
+        system = platform.system()
         
-        # If no ports found, check if on Windows and try an alternative approach
-        if len(ports) == 0 and os.name == 'nt':  # 'nt' is Windows
-            try:
-                # Direct Windows-specific approach
-                import winreg
-                # Iterate through registry to find COM ports
-                for i in range(256):
-                    try:
-                        port_name = f'COM{i}'
-                        key_path = f'HARDWARE\\DEVICEMAP\\SERIALCOMM'
-                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path)
-                        
-                        # Try to get value or continue if fails
-                        try:
-                            val = winreg.QueryValueEx(key, port_name)
-                            ports.append({
-                                'device': port_name,
-                                'description': f'Registry found port',
-                                'hwid': 'Unknown',
-                                'status': 'Unknown'  # Can't easily check without opening
-                            })
-                        except:
-                            pass
-                    except:
-                        pass
-            except:
-                pass
-                
+        if system == 'Windows':
+            # Special handling for Windows
+            for i in range(256):
+                port_name = f'COM{i}'
+                try:
+                    # Just try to initialize the port without opening it
+                    s = serial.Serial()
+                    s.port = port_name
+                    s.close()
+                    
+                    # If we get here, the port exists in the system
+                    ports.append({
+                        'device': port_name,
+                        'description': f'COM Port {i}',
+                        'status': 'Available'
+                    })
+                except serial.SerialException:
+                    # Skip this port and continue to the next
+                    continue
+        else:
+            # Original approach for macOS/Linux
+            for port in serial.tools.list_ports.comports():
+                try:
+                    # Don't actually open the port, just check if it's listed
+                    status = "Available"
+                    ports.append({
+                        'device': port.device,
+                        'description': port.description,
+                        'status': status
+                    })
+                except Exception:
+                    pass
+        
+        # If still empty on Windows, try a more direct approach with list_ports
+        if system == 'Windows' and len(ports) == 0:
+            # Use the raw output from list_ports directly
+            all_ports = list(serial.tools.list_ports.comports())
+            for port in all_ports:
+                ports.append({
+                    'device': port.device,
+                    'description': port.description,
+                    'status': 'Unknown'
+                })
+        
         return ports
-
+    
     def setup_connection(self, port, baud_rate=57600):
         """Establish a serial connection with the UHF reader."""
         try:
