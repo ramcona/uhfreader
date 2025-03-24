@@ -3,9 +3,65 @@
   <head>
     <title>RFID Reader Interface</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <style>
+      /* Basic styling for tabs and layout */
+      .tabs {
+        display: flex;
+        margin-bottom: 20px;
+      }
+      .tabs button {
+        padding: 10px 20px;
+        margin-right: 10px;
+        border: none;
+        background-color: #f1f1f1;
+        cursor: pointer;
+      }
+      .tabs button.active {
+        background-color: #4caf50;
+        color: white;
+      }
+      .tab-content {
+        display: none;
+        padding: 20px;
+        border: 1px solid #ddd;
+      }
+      .tab-content.active {
+        display: block;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      table,
+      th,
+      td {
+        border: 1px solid #ddd;
+      }
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      .actions {
+        margin-top: 20px;
+      }
+      .actions button {
+        margin-right: 10px;
+      }
+    </style>
     <script>
       let eventSource;
 
+      // Connect to the server-sent events stream
       function connectStream() {
         eventSource = new EventSource("/stream");
         eventSource.onmessage = function (e) {
@@ -16,6 +72,7 @@
         };
       }
 
+      // Fetch and populate serial ports
       async function fetchPorts() {
         const response = await fetch("/get_ports");
         const ports = await response.json();
@@ -32,6 +89,7 @@
         updatePortStatus(); // Update status label after populating ports
       }
 
+      // Update port status label
       function updatePortStatus() {
         const portSelect = document.getElementById("serial_port");
         const portStatus = document.getElementById("port_status");
@@ -41,6 +99,7 @@
         portStatus.style.color = status === "Connected" ? "green" : "red";
       }
 
+      // Update the data table
       function updateTable(data) {
         const table = document.getElementById("dataTable");
         table.innerHTML = `
@@ -65,11 +124,13 @@
             `;
       }
 
+      // Update statistics
       function updateStats(stats) {
         document.getElementById("totalReads").textContent = stats.total_reads;
         document.getElementById("lastRead").textContent = stats.last_read;
       }
 
+      // Update button states
       function updateButtons(isRunning) {
         const startButton = document.getElementById("startButton");
         const stopButton = document.getElementById("stopButton");
@@ -82,6 +143,7 @@
         }
       }
 
+      // Update settings
       async function updateSettings(e) {
         e.preventDefault();
         const formData = new FormData(e.target);
@@ -93,18 +155,21 @@
         alert(result.message);
       }
 
+      // Start the RFID reader
       async function startReader() {
         const response = await fetch("/start_reader");
         const result = await response.json();
         alert(result.message);
       }
 
+      // Stop the RFID reader
       async function stopReader() {
         const response = await fetch("/stop_reader");
         const result = await response.json();
         alert(result.message);
       }
 
+      // Clear data
       async function clearData() {
         const response = await fetch("/clear_data");
         const result = await response.json();
@@ -112,9 +177,71 @@
         location.reload();
       }
 
+      // Import participant data
+      async function importParticipants(e) {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append("file", e.target.file.files[0]);
+        const response = await fetch("/import_participants", {
+          method: "POST",
+          body: formData,
+        });
+        const result = await response.json();
+        alert(result.message);
+        fetchParticipants(); // Refresh participant list after import
+      }
+
+      // Fetch and display participant data
+      async function fetchParticipants() {
+        try {
+          const response = await fetch("/get_participants");
+          const result = await response.json();
+          if (result.success) {
+            updateParticipantTable(result.data);
+          } else {
+            alert(`Error: ${result.message}`);
+          }
+        } catch (error) {
+          alert("Failed to fetch participants. Please try again.");
+        }
+      }
+
+      // Update the participant table
+      function updateParticipantTable(data) {
+        const tableBody = document.querySelector("#participantTable tbody");
+        tableBody.innerHTML = data
+          .map(
+            (participant) => `
+                <tr>
+                    <td>${participant["Member NO"]}</td>
+                    <td>${participant["Nama"]}</td>
+                    <td>${participant["Alamat"]}</td>
+                    <td>${participant["Gender"]}</td>
+                    <td>${participant["EPC"]}</td>
+                    <td>${participant["Country"]}</td>
+                    <td>${participant["Status"]}</td>
+                </tr>
+            `
+          )
+          .join("");
+      }
+
+      // Open a specific tab
+      function openTab(tabName) {
+        const tabs = document.querySelectorAll(".tab-content");
+        tabs.forEach((tab) => (tab.style.display = "none"));
+        document.getElementById(tabName).style.display = "block";
+
+        if (tabName === "participants") {
+          fetchParticipants(); // Fetch and display participants
+        }
+      }
+
+      // Initialize the page
       window.onload = function () {
         connectStream();
-        fetchPorts(); // Fetch and display serial ports on page load
+        fetchPorts();
+        openTab("start"); // Default tab
       };
     </script>
   </head>
@@ -122,6 +249,65 @@
     <div class="container">
       <h1>RFID Reader Interface</h1>
 
+      <!-- Tabs -->
+      <div class="tabs">
+        <button onclick="openTab('start')">Start</button>
+        <button onclick="openTab('finish')">Finish</button>
+        <button onclick="openTab('participants')">Participants</button>
+        <button onclick="openTab('merged')">Merged Data</button>
+      </div>
+
+      <!-- Start Tab -->
+      <div id="start" class="tab-content active">
+        <h2>Start Data</h2>
+        <button onclick="window.location='/download_start'">
+          Download Start Data
+        </button>
+      </div>
+
+      <!-- Finish Tab -->
+      <div id="finish" class="tab-content">
+        <h2>Finish Data</h2>
+        <button onclick="window.location='/download_finish'">
+          Download Finish Data
+        </button>
+      </div>
+
+      <!-- Participants Tab -->
+      <div id="participants" class="tab-content">
+        <h2>Participants</h2>
+        <form onsubmit="importParticipants(event)">
+          <input type="file" name="file" accept=".xlsx" required />
+          <button type="submit">Import Participants</button>
+        </form>
+        <h3>Participant List</h3>
+        <table id="participantTable">
+          <thead>
+            <tr>
+              <th>Member NO</th>
+              <th>Nama</th>
+              <th>Alamat</th>
+              <th>Gender</th>
+              <th>EPC</th>
+              <th>Country</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Participant data will be populated here -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Merged Data Tab -->
+      <div id="merged" class="tab-content">
+        <h2>Merged Data</h2>
+        <button onclick="window.location='/download_merged'">
+          Download Merged Data
+        </button>
+      </div>
+
+      <!-- Settings -->
       <div class="settings">
         <h2>Settings</h2>
         <form onsubmit="updateSettings(event)">
@@ -145,32 +331,34 @@
             />
           </label>
           <label>
-            CSV File:
+            Output File:
             <input
               type="text"
-              name="csv_file"
-              value="{{ settings.csv_file }}"
+              name="output_file"
+              value="{{ settings.output_file }}"
             />
           </label>
           <button type="submit">Update Settings</button>
         </form>
       </div>
 
+      <!-- Statistics -->
       <div class="stats">
         <h2>Statistics</h2>
         <p>Total Reads: <span id="totalReads">0</span></p>
         <p>Last Read: <span id="lastRead">Never</span></p>
       </div>
 
+      <!-- Actions -->
       <div class="actions">
         <button id="startButton" onclick="startReader()">Start Reader</button>
         <button id="stopButton" onclick="stopReader()" disabled>
           Stop Reader
         </button>
         <button onclick="clearData()">Clear Data</button>
-        <button onclick="window.location='/download_csv'">Download CSV</button>
       </div>
 
+      <!-- Data Table -->
       <div class="data-table">
         <h2>Recent Reads</h2>
         <table id="dataTable">

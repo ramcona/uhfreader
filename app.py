@@ -5,6 +5,7 @@ import webbrowser
 import time
 import socket
 from contextlib import closing
+from openpyxl import Workbook, load_workbook
 
 # Check if we're running as a PyInstaller bundle
 if getattr(sys, 'frozen', False):
@@ -53,11 +54,11 @@ def get_ports():
 def update_settings():
     port = request.form['serial_port']
     baud_rate = int(request.form['baud_rate'])
-    csv_file = request.form['csv_file']
+    output_file = request.form['output_file']
     
     success, message = reader.setup_connection(port, baud_rate)
     if success:
-        reader.settings['csv_file'] = csv_file
+        reader.settings['output_file'] = output_file
     return jsonify({'success': success, 'message': message})
 
 @app.route('/start_reader')
@@ -79,10 +80,95 @@ def clear_data():
 def download_csv():
     return send_file(reader.settings['csv_file'], as_attachment=True)
 
+@app.route('/download_excel')
+def download_excel():
+    return send_file(reader.settings['output_file'], as_attachment=True)
+
+@app.route('/import_participants', methods=['POST'])
+def import_participants():
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'No file uploaded'})
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'No file selected'})
+    file_path = os.path.join(application_path, file.filename)
+    file.save(file_path)
+    reader.import_participants(file_path)
+    return jsonify({'success': True, 'message': 'Participant data imported successfully'})
+
+@app.route('/download_start')
+def download_start():
+    if not os.path.exists(reader.settings['output_file']):
+        return jsonify({'success': False, 'message': 'File does not exist'}), 404
+    return send_file(reader.settings['output_file'], as_attachment=True, download_name="start_data.xlsx")
+
+@app.route('/download_finish')
+def download_finish():
+    if not os.path.exists(reader.settings['output_file']):
+        return jsonify({'success': False, 'message': 'File does not exist'}), 404
+    return send_file(reader.settings['output_file'], as_attachment=True, download_name="finish_data.xlsx")
+
+@app.route('/download_merged')
+def download_merged():
+    if not os.path.exists(reader.settings['output_file']):
+        return jsonify({'success': False, 'message': 'File does not exist'}), 404
+
+    # Fetch merged data
+    merged_data = reader.get_merged_data()
+
+    # Create a new workbook and add headers
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["EPC", "NAMA", "BIB", "Start Timestamp", "Finish Timestamp", "Duration"])
+
+    # Add merged data to the sheet
+    for row in merged_data:
+        sheet.append([
+            row["EPC"],
+            row["NAMA"],
+            row["BIB"],
+            row["Start Timestamp"],
+            row["Finish Timestamp"],
+            row["Duration"]
+        ])
+
+    # Save the workbook to a temporary file
+    file_path = os.path.join(application_path, "merged_data.xlsx")
+    workbook.save(file_path)
+
+    # Send the file as a response
+    return send_file(file_path, as_attachment=True, download_name="merged_data.xlsx")
+
 @app.route('/retry_missed_tags')
 def retry_missed_tags():
     success = reader.retry_missed_tags()
     return jsonify({'success': success, 'message': 'Retry operation completed'})
+
+@app.route('/get_participants')
+def get_participants():
+    try:
+        if not os.path.exists(reader.settings['output_file']):
+            return jsonify({'success': False, 'message': 'File does not exist', 'data': []})
+
+        workbook = load_workbook(reader.settings['output_file'])
+        if "Participants" not in workbook.sheetnames:
+            return jsonify({'success': False, 'message': 'Participants sheet does not exist', 'data': []})
+
+        sheet = workbook["Participants"]
+        participants = []
+        for row in sheet.iter_rows(min_row=2, values_only=True):  # Skip header row
+            participants.append({
+                "Member NO": row[0],
+                "Nama": row[1],
+                "Alamat": row[2],
+                "Gender": row[3],
+                "EPC": row[4],
+                "Country": row[5],
+                "Status": row[6]
+            })
+        return jsonify({'success': True, 'data': participants})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e), 'data': []})
 
 @app.route('/stream')
 def stream():
