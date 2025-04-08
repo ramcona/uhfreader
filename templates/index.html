@@ -1,382 +1,264 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RFID Reader Interface</title>
     <link rel="stylesheet" href="/static/style.css" />
-    <style>
-      /* Basic styling for tabs and layout */
-      .tabs {
-        display: flex;
-        margin-bottom: 20px;
-      }
-      .tabs button {
-        padding: 10px 20px;
-        margin-right: 10px;
-        border: none;
-        background-color: #f1f1f1;
-        cursor: pointer;
-      }
-      .tabs button.active {
-        background-color: #4caf50;
-        color: white;
-      }
-      .tab-content {
-        display: none;
-        padding: 20px;
-        border: 1px solid #ddd;
-      }
-      .tab-content.active {
-        display: block;
-      }
-      .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 20px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-      }
-      table,
-      th,
-      td {
-        border: 1px solid #ddd;
-      }
-      th,
-      td {
-        padding: 10px;
-        text-align: left;
-      }
-      th {
-        background-color: #f2f2f2;
-      }
-      .actions {
-        margin-top: 20px;
-      }
-      .actions button {
-        margin-right: 10px;
-      }
-    </style>
-    <script>
-      let eventSource;
-
-      // Connect to the server-sent events stream
-      function connectStream() {
-        eventSource = new EventSource("/stream");
-        eventSource.onmessage = function (e) {
-          const data = JSON.parse(e.data);
-          updateTable(data.data);
-          updateStats(data.stats);
-          updateButtons(data.is_running);
-        };
-      }
-
-      // Fetch and populate serial ports
-      async function fetchPorts() {
-        const response = await fetch("/get_ports");
-        const ports = await response.json();
-        const portSelect = document.getElementById("serial_port");
-        portSelect.innerHTML = ports
-          .map(
-            (port) => `
-        <option value="${port.device}" data-status="${port.status}">
-            ${port.device} - ${port.description}
-        </option>
-    `
-          )
-          .join("");
-        updatePortStatus(); // Update status label after populating ports
-      }
-
-      // Update port status label
-      function updatePortStatus() {
-        const portSelect = document.getElementById("serial_port");
-        const portStatus = document.getElementById("port_status");
-        const selectedOption = portSelect.options[portSelect.selectedIndex];
-        const status = selectedOption.getAttribute("data-status");
-        portStatus.textContent = status;
-        portStatus.style.color = status === "Connected" ? "green" : "red";
-      }
-
-      // Update the data table
-      function updateTable(data) {
-        const table = document.getElementById("dataTable");
-        table.innerHTML = `
-                <tr>
-                    <th>Timestamp</th>
-                    <th>EPC</th>
-                    <th>RSSI</th>
-                    <th>Antenna</th>
-                </tr>
-                ${data
-                  .map(
-                    (row) => `
-                    <tr>
-                        <td>${row.timestamp}</td>
-                        <td>${row.epc}</td>
-                        <td>${row.rssi}</td>
-                        <td>${row.antenna}</td>
-                    </tr>
-                `
-                  )
-                  .join("")}
-            `;
-      }
-
-      // Update statistics
-      function updateStats(stats) {
-        document.getElementById("totalReads").textContent = stats.total_reads;
-        document.getElementById("lastRead").textContent = stats.last_read;
-      }
-
-      // Update button states
-      function updateButtons(isRunning) {
-        const startButton = document.getElementById("startButton");
-        const stopButton = document.getElementById("stopButton");
-        if (isRunning) {
-          startButton.disabled = true;
-          stopButton.disabled = false;
-        } else {
-          startButton.disabled = false;
-          stopButton.disabled = true;
-        }
-      }
-
-      // Update settings
-      async function updateSettings(e) {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const response = await fetch("/update_settings", {
-          method: "POST",
-          body: formData,
-        });
-        const result = await response.json();
-        alert(result.message);
-      }
-
-      // Start the RFID reader
-      async function startReader() {
-        const response = await fetch("/start_reader");
-        const result = await response.json();
-        alert(result.message);
-      }
-
-      // Stop the RFID reader
-      async function stopReader() {
-        const response = await fetch("/stop_reader");
-        const result = await response.json();
-        alert(result.message);
-      }
-
-      // Clear data
-      async function clearData() {
-        const response = await fetch("/clear_data");
-        const result = await response.json();
-        alert(result.message);
-        location.reload();
-      }
-
-      // Import participant data
-      async function importParticipants(e) {
-        e.preventDefault();
-        const formData = new FormData();
-        formData.append("file", e.target.file.files[0]);
-        const response = await fetch("/import_participants", {
-          method: "POST",
-          body: formData,
-        });
-        const result = await response.json();
-        alert(result.message);
-        fetchParticipants(); // Refresh participant list after import
-      }
-
-      // Fetch and display participant data
-      async function fetchParticipants() {
-        try {
-          const response = await fetch("/get_participants");
-          const result = await response.json();
-          if (result.success) {
-            updateParticipantTable(result.data);
-          } else {
-            alert(`Error: ${result.message}`);
-          }
-        } catch (error) {
-          alert("Failed to fetch participants. Please try again.");
-        }
-      }
-
-      // Update the participant table
-      function updateParticipantTable(data) {
-        const tableBody = document.querySelector("#participantTable tbody");
-        tableBody.innerHTML = data
-          .map(
-            (participant) => `
-                <tr>
-                    <td>${participant["Member NO"]}</td>
-                    <td>${participant["Nama"]}</td>
-                    <td>${participant["Alamat"]}</td>
-                    <td>${participant["Gender"]}</td>
-                    <td>${participant["EPC"]}</td>
-                    <td>${participant["Country"]}</td>
-                    <td>${participant["Status"]}</td>
-                </tr>
-            `
-          )
-          .join("");
-      }
-
-      // Open a specific tab
-      function openTab(tabName) {
-        const tabs = document.querySelectorAll(".tab-content");
-        tabs.forEach((tab) => (tab.style.display = "none"));
-        document.getElementById(tabName).style.display = "block";
-
-        if (tabName === "participants") {
-          fetchParticipants(); // Fetch and display participants
-        }
-      }
-
-      // Initialize the page
-      window.onload = function () {
-        connectStream();
-        fetchPorts();
-        openTab("start"); // Default tab
-      };
-    </script>
+    <script src="/static/app.js"></script>
   </head>
-  <body>
-    <div class="container">
-      <h1>RFID Reader Interface</h1>
+  <body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+      <header class="bg-white shadow-md rounded-lg mb-6 p-6">
+        <h1 class="text-3xl font-bold text-gray-800">RFID Reader Interface</h1>
+      </header>
 
-      <!-- Tabs -->
-      <div class="tabs">
-        <button onclick="openTab('start')">Start</button>
-        <button onclick="openTab('finish')">Finish</button>
-        <button onclick="openTab('participants')">Participants</button>
-        <button onclick="openTab('merged')">Merged Data</button>
-      </div>
+      <!-- Navigation Tabs -->
+      <nav class="mb-6">
+        <div
+          class="flex space-x-2 bg-white shadow-md rounded-lg overflow-hidden"
+        >
+          <button
+            onclick="openTab('start')"
+            class="flex-1 py-3 text-gray-600 hover:bg-green-50 hover:text-green-600 transition-colors tab-button"
+          >
+            Start
+          </button>
+          <button
+            onclick="openTab('finish')"
+            class="flex-1 py-3 text-gray-600 hover:bg-green-50 hover:text-green-600 transition-colors tab-button"
+          >
+            Finish
+          </button>
+          <button
+            onclick="openTab('participants')"
+            class="flex-1 py-3 text-gray-600 hover:bg-green-50 hover:text-green-600 transition-colors tab-button"
+          >
+            Participants
+          </button>
+          <button
+            onclick="openTab('merged')"
+            class="flex-1 py-3 text-gray-600 hover:bg-green-50 hover:text-green-600 transition-colors tab-button"
+          >
+            Merged Data
+          </button>
+        </div>
+      </nav>
 
-      <!-- Start Tab -->
-      <div id="start" class="tab-content active">
-        <h2>Start Data</h2>
-        <button onclick="window.location='/download_start'">
-          Download Start Data
-        </button>
-      </div>
+      <!-- Tab Contents -->
+      <div class="space-y-6">
+        <!-- Start Tab -->
+        <div id="start" class="tab-content bg-white shadow-md rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">Start Data</h2>
+          <button
+            onclick="window.location='/download_start'"
+            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+          >
+            Download Start Data
+          </button>
+        </div>
 
-      <!-- Finish Tab -->
-      <div id="finish" class="tab-content">
-        <h2>Finish Data</h2>
-        <button onclick="window.location='/download_finish'">
-          Download Finish Data
-        </button>
-      </div>
+        <!-- Finish Tab -->
+        <div
+          id="finish"
+          class="tab-content hidden bg-white shadow-md rounded-lg p-6"
+        >
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">Finish Data</h2>
+          <button
+            onclick="window.location='/download_finish'"
+            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+          >
+            Download Finish Data
+          </button>
+        </div>
 
-      <!-- Participants Tab -->
-      <div id="participants" class="tab-content">
-        <h2>Participants</h2>
-        <form onsubmit="importParticipants(event)">
-          <input type="file" name="file" accept=".xlsx" required />
-          <button type="submit">Import Participants</button>
-        </form>
-        <h3>Participant List</h3>
-        <table id="participantTable">
-          <thead>
-            <tr>
-              <th>Member NO</th>
-              <th>Nama</th>
-              <th>Alamat</th>
-              <th>Gender</th>
-              <th>EPC</th>
-              <th>Country</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Participant data will be populated here -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Merged Data Tab -->
-      <div id="merged" class="tab-content">
-        <h2>Merged Data</h2>
-        <button onclick="window.location='/download_merged'">
-          Download Merged Data
-        </button>
-      </div>
-
-      <!-- Settings -->
-      <div class="settings">
-        <h2>Settings</h2>
-        <form onsubmit="updateSettings(event)">
-          <label>
-            Serial Port:
-            <select
-              name="serial_port"
-              id="serial_port"
-              onchange="updatePortStatus()"
+        <!-- Participants Tab -->
+        <div
+          id="participants"
+          class="tab-content hidden bg-white shadow-md rounded-lg p-6"
+        >
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">
+            Participants
+          </h2>
+          <form onsubmit="importParticipants(event)" class="mb-4">
+            <div class="flex items-center space-x-4">
+              <input
+                type="file"
+                name="file"
+                accept=".xlsx"
+                required
+                class="flex-grow file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+              />
+              <button
+                type="submit"
+                class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+              >
+                Import Participants
+              </button>
+            </div>
+          </form>
+          <div class="overflow-x-auto">
+            <table
+              id="participantTable"
+              class="w-full bg-white border border-gray-200"
             >
-              <!-- Ports will be populated dynamically -->
-            </select>
-          </label>
-          <label> Status: <span id="port_status">Disconnected</span> </label>
-          <label>
-            Baud Rate:
-            <input
-              type="number"
-              name="baud_rate"
-              value="{{ settings.baud_rate }}"
-            />
-          </label>
-          <label>
-            Output File:
-            <input
-              type="text"
-              name="output_file"
-              value="{{ settings.output_file }}"
-            />
-          </label>
-          <button type="submit">Update Settings</button>
-        </form>
-      </div>
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-3 text-left">Member NO</th>
+                  <th class="p-3 text-left">Nama</th>
+                  <th class="p-3 text-left">Alamat</th>
+                  <th class="p-3 text-left">Gender</th>
+                  <th class="p-3 text-left">EPC</th>
+                  <th class="p-3 text-left">Country</th>
+                  <th class="p-3 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Participant data will be populated here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-      <!-- Statistics -->
-      <div class="stats">
-        <h2>Statistics</h2>
-        <p>Total Reads: <span id="totalReads">0</span></p>
-        <p>Last Read: <span id="lastRead">Never</span></p>
-      </div>
+        <!-- Merged Data Tab -->
+        <div
+          id="merged"
+          class="tab-content hidden bg-white shadow-md rounded-lg p-6"
+        >
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">Merged Data</h2>
+          <button
+            onclick="window.location='/download_merged'"
+            class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+          >
+            Download Merged Data
+          </button>
+        </div>
 
-      <!-- Actions -->
-      <div class="actions">
-        <button id="startButton" onclick="startReader()">Start Reader</button>
-        <button id="stopButton" onclick="stopReader()" disabled>
-          Stop Reader
-        </button>
-        <button onclick="clearData()">Clear Data</button>
-      </div>
+        <!-- Settings -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">Settings</h2>
+          <form onsubmit="updateSettings(event)" class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-gray-700 mb-2">Serial Port</label>
+                <select
+                  name="serial_port"
+                  id="serial_port"
+                  onchange="updatePortStatus()"
+                  class="w-full px-3 py-2 border rounded"
+                >
+                  <!-- Ports will be populated dynamically -->
+                </select>
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-2">Status</label>
+                <span id="port_status" class="text-red-500">Disconnected</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-gray-700 mb-2">Baud Rate</label>
+                <input
+                  type="number"
+                  name="baud_rate"
+                  value="{{ settings.baud_rate }}"
+                  class="w-full px-3 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-2">Output File</label>
+                <input
+                  type="text"
+                  name="output_file"
+                  value="{{ settings.output_file }}"
+                  class="w-full px-3 py-2 border rounded"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+            >
+              Update Settings
+            </button>
+          </form>
+        </div>
 
-      <!-- Data Table -->
-      <div class="data-table">
-        <h2>Recent Reads</h2>
-        <table id="dataTable">
-          <tr>
-            <th>Timestamp</th>
-            <th>EPC</th>
-            <th>RSSI</th>
-            <th>Antenna</th>
-          </tr>
-          {% for row in data %}
-          <tr>
-            <td>{{ row.timestamp }}</td>
-            <td>{{ row.epc }}</td>
-            <td>{{ row.rssi }}</td>
-            <td>{{ row.antenna }}</td>
-          </tr>
-          {% endfor %}
-        </table>
+        <!-- Statistics -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">Statistics</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-gray-600">
+                Total Reads: <span id="totalReads" class="font-bold">0</span>
+              </p>
+            </div>
+            <div>
+              <p class="text-gray-600">
+                Last Read: <span id="lastRead" class="font-bold">Never</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <div class="flex space-x-4">
+            <button
+              id="startButton"
+              onclick="startReader()"
+              class="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+            >
+              Start Reader
+            </button>
+            <button
+              id="stopButton"
+              onclick="stopReader()"
+              disabled
+              class="flex-1 bg-red-500 text-white px-4 py-2 rounded opacity-50 cursor-not-allowed"
+            >
+              Stop Reader
+            </button>
+            <button
+              onclick="clearData()"
+              class="flex-1 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors"
+            >
+              Clear Data
+            </button>
+          </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <h2 class="text-2xl font-semibold mb-4 text-gray-700">
+            Recent Reads
+          </h2>
+          <div class="overflow-x-auto">
+            <table
+              id="dataTable"
+              class="w-full bg-white border border-gray-200"
+            >
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="p-3 text-left">Timestamp</th>
+                  <th class="p-3 text-left">EPC</th>
+                  <th class="p-3 text-left">RSSI</th>
+                  <th class="p-3 text-left">Antenna</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in data %}
+                <tr>
+                  <td class="p-3">{{ row.timestamp }}</td>
+                  <td class="p-3">{{ row.epc }}</td>
+                  <td class="p-3">{{ row.rssi }}</td>
+                  <td class="p-3">{{ row.antenna }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </body>
